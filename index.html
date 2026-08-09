@@ -329,6 +329,7 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
   let abortController = null;
   let lastFin = null;     // stores last computed plan so lever values are accessible on tap
   let lastPlanData = null;  // stores the raw plan object for lever re-renders
+  let lastOnTrack = null;    // stores on-track result so success handler can use correct framing
 
   function updateWhoami() {
     const bits = [];
@@ -454,7 +455,7 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
   // Ask only for what's still missing; announce what we captured.
   function advanceOnboarding(justGot){
     updateWhoami();
-    if (!profile.name) { stage='name'; setTimeout(()=>addRow('ai', `To start, what should I call you?`),300); return; }
+    if (!profile.name) { if (stage !== 'name') { stage='name'; setTimeout(()=>addRow('ai', `To start, what should I call you?`),300); } return; }
     if (!profile.age)  { stage='age';  setTimeout(()=>addRow('ai', `Lovely to meet you, <strong>${escapeHtml(profile.name)}</strong>. How old are you? It helps me judge how much runway a goal really has.`),300); return; }
     if (!profile.risk) {
       stage='risk';
@@ -680,8 +681,15 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
         if (chosenLever === 'increase' && profile.monthly) {
           plan.monthly = profile.monthly;
         }
-        try { html += renderNegotiation(plan); }
-        catch(renderErr) { console.error('renderNegotiation threw:', renderErr); }
+        let cardHtml = '';
+        try { cardHtml = renderNegotiation(plan); } catch(renderErr) { console.error('renderNegotiation threw:', renderErr); }
+        if (cardHtml) {
+          // Replace Nivi's text (often wrong) with a correct short frame based on actual math result
+          const frame = lastOnTrack
+            ? (chosenLever ? `Great choice${profile.name ? ', ' + profile.name : ''}. Here is how it plays out.` : `You are in good shape${profile.name ? ', ' + profile.name : ''}. Here is the full picture.`)
+            : `Here is exactly where you stand${profile.name ? ', ' + profile.name : ''}.`;
+          html = '<span style="font-family:system-ui,sans-serif;font-size:14px;line-height:1.6">' + escapeHtml(frame) + '</span>' + cardHtml;
+        }
       } else if (chosenLever && lastPlanData) {
         // Model didn't return a PLAN block after lever choice; synthesize from stored data
         const synth = Object.assign({}, lastPlanData);
@@ -762,6 +770,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
     });
     lastFin = fin;  // make lever values accessible when user taps a lever card
     lastPlanData = p;  // keep raw plan so we can re-render after lever choice
+    lastOnTrack = fin.onTrack;  // expose so success handler can use correct framing text
 
     const years        = fin.years;
     const monthly       = fin.monthly;
