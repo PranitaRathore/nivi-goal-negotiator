@@ -638,18 +638,34 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
       if (stage === 'goaltype') stage = 'goal';
 
       let convo = raw, plan = null;
-      // Try with closing @@ first (Claude), then without (Llama/Groq omits it)
-      const m = raw.match(/@@PLAN(\{[\s\S]*?\})@@/) || raw.match(/@@PLAN(\{[\s\S]*?\})\s*$/m);
+      // Try every format Llama/Groq might use for the PLAN block
+      const m = raw.match(/@@PLAN(\{[\s\S]*?\})@@/)
+             || raw.match(/@@PLAN(\{[\s\S]*?\})\s*$/m)
+             || raw.match(/@@PLAN(\{[\s\S]*?\})/);
       if (m) {
         convo = raw.slice(0, m.index).trim();
-        try { plan = JSON.parse(m[1]); } catch(e){}
+        try { plan = JSON.parse(m[1]); }
+        catch(e) {
+          try {
+            const fixed = m[1].replace(/,\s*([}\]])/g, '$1').replace(/'/g, '"');
+            plan = JSON.parse(fixed);
+          } catch(e2) { console.error('PLAN parse fail:', e2.message, m[1].slice(0,200)); }
+        }
+        if (plan) {
+          plan.target_today   = +(plan.target_today)   || 0;
+          plan.timeline_years = +(plan.timeline_years) || 0;
+          plan.monthly        = plan.monthly != null ? +(plan.monthly) : null;
+          plan.existing       = +(plan.existing)       || 0;
+          plan.return_pct     = +(plan.return_pct)     || (profile.ret || 10);
+          plan.inflation_pct  = +(plan.inflation_pct)  || profile.inflation;
+        }
       } else {
-        // Strip any partial @@PLAN block so it never shows as raw text
+        console.error('No @@PLAN found. Raw tail:', raw.slice(-300));
         convo = raw.replace(/@@PLAN[\s\S]*/g, '').trim();
       }
 
       let html = escapeHtml(convo).replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-      const ok = plan && plan.target_today && plan.timeline_years && plan.monthly != null;
+      const ok = plan && plan.target_today > 0 && plan.timeline_years > 0 && plan.monthly != null;
       if (ok) {
         // Sync profile assumptions
         if (plan.monthly)       profile.monthly    = plan.monthly;
