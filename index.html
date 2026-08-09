@@ -323,7 +323,8 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
   let chosenLever = null;
   let lockedRec = null;
   let abortController = null;
-  let lastFin = null;  // stores last computed plan so lever values are accessible on tap
+  let lastFin = null;     // stores last computed plan so lever values are accessible on tap
+  let lastPlanData = null;  // stores the raw plan object for lever re-renders
 
   function updateWhoami() {
     const bits = [];
@@ -640,12 +641,29 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
       let html = escapeHtml(convo).replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
       const ok = plan && plan.target_today && plan.timeline_years && plan.monthly != null;
       if (ok) {
-        // Sync all profile assumptions from the PLAN block so the assumptions bar stays current
+        // Sync profile assumptions
         if (plan.monthly)       profile.monthly    = plan.monthly;
         if (plan.inflation_pct) profile.inflation  = +plan.inflation_pct;
         if (plan.return_pct)    profile.ret        = +plan.return_pct;
+        // For chosen levers, force-correct the plan with our trusted computed values.
+        // The free model often returns stale data; our engine is always right.
+        if (chosenLever === 'stretch' && profile.chosenYears) {
+          plan.timeline_years = profile.chosenYears;
+        }
+        if (chosenLever === 'increase' && profile.monthly) {
+          plan.monthly = profile.monthly;
+        }
         try { html += renderNegotiation(plan); }
         catch(renderErr) { console.error('renderNegotiation threw:', renderErr); }
+      } else if (chosenLever && lastPlanData) {
+        // Model didn't return a PLAN block after lever choice; synthesize from stored data
+        const synth = Object.assign({}, lastPlanData);
+        if (chosenLever === 'stretch' && profile.chosenYears) synth.timeline_years = profile.chosenYears;
+        if (chosenLever === 'increase' && profile.monthly)    synth.monthly = profile.monthly;
+        if (synth.target_today && synth.timeline_years && synth.monthly != null) {
+          try { html += renderNegotiation(synth); }
+          catch(e) { console.error('synth render error:', e); }
+        }
       }
       thinkRow.querySelector('.bubble').innerHTML = html;
       if (ok) wireNegotiation(thinkRow, plan);
@@ -716,6 +734,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
       inflPct:     (p.inflation_pct != null ? p.inflation_pct : profile.inflation),
     });
     lastFin = fin;  // make lever values accessible when user taps a lever card
+    lastPlanData = p;  // keep raw plan so we can re-render after lever choice
 
     const years        = fin.years;
     const monthly       = fin.monthly;
