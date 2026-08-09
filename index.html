@@ -71,6 +71,10 @@
   .comp-val.have { color: var(--sage-deep); }
   .comp-val.need-val { color: var(--clay); }
   .surplus-pill { display: inline-flex; align-items: center; gap: 6px; background: #e8f2e6; border: 1px solid #c2d9be; border-radius: 999px; padding: 6px 14px; margin-bottom: 10px; }
+  .congrats-banner { background: linear-gradient(135deg, #e8f2e6 0%, #f0f7ee 100%); border: 1.5px solid #c2d9be; border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; text-align: center; }
+  .congrats-banner .emoji { font-size: 28px; display: block; margin-bottom: 6px; }
+  .congrats-banner .title { font-size: 17px; font-weight: 700; color: var(--sage-deep); margin-bottom: 4px; }
+  .congrats-banner .sub { font-family: system-ui, sans-serif; font-size: 13px; color: var(--muted); }
   .surplus-ico { font-size: 14px; font-weight: 700; color: var(--sage-deep); }
   .surplus-amt { font-family: Georgia, serif; font-size: 16px; font-weight: 700; color: var(--sage-deep); }
   .surplus-txt { font-family: system-ui, sans-serif; font-size: 12px; color: var(--sage); }
@@ -610,7 +614,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'openrouter/free',
+          model: 'google/gemini-2.0-flash-exp:free',
           max_tokens: 1200,
           messages: [{ role: 'system', content: systemPrompt() }, ...history]
         })
@@ -805,6 +809,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
 
     return `<div class="gap-hero">
       ${nivi_line}
+      ${congrats}
       <div class="goalcard">
         <div class="gc-head">
           <div class="gc-eyebrow">Your goal</div>
