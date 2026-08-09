@@ -436,8 +436,9 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
         break;
       }
     }
-    // Fallback: strip noise words and take the first name-like token
-    if (!found.name) {
+    // Fallback: only try first-token if input is short (≤3 words, likely a bare name)
+    // Longer inputs are almost certainly goal statements, not names.
+    if (!found.name && text.trim().split(/\s+/).length <= 3) {
       let t = text
         .replace(/\b(1[3-9]|[2-9]\d)\b/g,' ')
         .replace(/\b(years?\s*old|yrs?|y\/o|yo|year|age|old)\b/ig,' ')
@@ -445,7 +446,7 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
         .replace(/\b(you\s+can\s+call\s+me|call\s+me|my\s+name\s+is|i\s+am|i'?m|this\s+is|it'?s|name'?s|hi|hey|hello)\b/ig,' ')
         .trim();
       let nameTok = (t.match(/[\p{L}][\p{L}\-']*/u)||[])[0];
-      if (nameTok && !/^(me|you|my|the|a|an|he|she|they|it|we|i|want|just|hi|hey|ok|yes|no|so|and)$/i.test(nameTok)) {
+      if (nameTok && !/^(me|you|my|the|a|an|he|she|they|it|we|i|want|just|hi|hey|ok|yes|no|so|and|save|saving|buy|buying|plan|planning|need|get|make|have|like|would|could|should|will|also|too|for|with|from|into|onto|over|about|some|more|much|many|than|that|this|those|these|its|our|their|been|being|was|were|has|had|did|does|do|am|is|are|not|but|or|if|then|when|where|how|what|why|who|which)$/i.test(nameTok)) {
         found.name = nameTok.charAt(0).toUpperCase() + nameTok.slice(1);
       }
     }
@@ -455,7 +456,7 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
   // Ask only for what's still missing; announce what we captured.
   function advanceOnboarding(justGot){
     updateWhoami();
-    if (!profile.name) { if (stage !== 'name') { stage='name'; setTimeout(()=>addRow('ai', `To start, what should I call you?`),300); } return; }
+    if (!profile.name) { if (stage !== 'name') { stage='name'; setTimeout(()=>addRow('ai', `To start, what should I call you?`),300); } else { setTimeout(()=>addRow('ai', `What should I call you?`),300); } return; }
     if (!profile.age)  { stage='age';  setTimeout(()=>addRow('ai', `Lovely to meet you, <strong>${escapeHtml(profile.name)}</strong>. How old are you? It helps me judge how much runway a goal really has.`),300); return; }
     if (!profile.risk) {
       stage='risk';
@@ -513,7 +514,7 @@ WHAT YOU ALREADY KNOW ABOUT THIS USER (do NOT ask for any of these again; treat 
 FLOW (only ever ask for what is still missing from the list above):
 1. From the user's goal, work out the goal category, target amount (today's ₹) and timeline (years). For RETIREMENT goals specifically, you MUST ask for the target corpus (e.g. 'How much do you want to have saved by retirement?'), never assume 0. If the amount or timeline is missing for any goal, ask ONE warm short question. If both are already given, do not re-ask; move on.
 2. If, and ONLY if, the monthly investment capacity above is "not yet known", ask warmly for it in one short message (you may also ask about existing savings in the same message). If it is already known, skip this entirely and go straight to the analysis.
-3. As soon as you have goal amount, timeline and a monthly figure, produce the analysis in the @@PLAN block below (the app renders the numbers as visual cards). There are only TWO levers to offer: stretch the timeline, or increase the monthly. Do NOT suggest reducing the target.
+3. As soon as you have goal amount, timeline and a monthly figure, produce the analysis in the @@PLAN block below (the app renders the numbers as visual cards). There are only TWO options: (A) stretch the timeline, or (B) increase the monthly. Do NOT mention reducing the target, do NOT say 'three paths' or 'all three'.
 
 Before asking ANY question, re-read the known-facts list. If the answer is already there, do not ask; use it. Re-asking something the user already told you breaks their trust.
 
@@ -631,6 +632,9 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
       raw = raw.replace(/\*?\*?Response Safety:\s*\w+\*?\*?/gi, '');
       raw = raw.replace(/Safety Rating[^\n]*\n?/gi, '');
       raw = raw.replace(/\[SAFETY[^\]]*\]/gi, '');
+      // Normalise "three paths/ways" → "two ways" since we removed the third lever
+      raw = raw.replace(/all three paths/gi, 'the options below');
+      raw = raw.replace(/three (ways|paths|options)/gi, 'two ways');
       raw = raw.trim();
       if (!raw) raw = '...'; // guard: API must not receive empty assistant turns
       history.push({ role:'assistant', content:raw });
@@ -685,9 +689,12 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
         try { cardHtml = renderNegotiation(plan); } catch(renderErr) { console.error('renderNegotiation threw:', renderErr); }
         if (cardHtml) {
           // Replace Nivi's text (often wrong) with a correct short frame based on actual math result
+          const name = profile.name || '';
           const frame = lastOnTrack
-            ? (chosenLever ? `Great choice${profile.name ? ', ' + profile.name : ''}. Here is how it plays out.` : `You are in good shape${profile.name ? ', ' + profile.name : ''}. Here is the full picture.`)
-            : `Here is exactly where you stand${profile.name ? ', ' + profile.name : ''}.`;
+            ? (chosenLever
+                ? `Great choice${name ? ', ' + name : ''}. Here is how that plays out.`
+                : `Good news${name ? ', ' + name : ''}. Your current savings already cover this goal.`)
+            : `Here is exactly where you stand${name ? ', ' + name : ''}.`;
           html = '<span style="font-family:system-ui,sans-serif;font-size:14px;line-height:1.6">' + escapeHtml(frame) + '</span>' + cardHtml;
         }
       } else if (chosenLever && lastPlanData) {
@@ -793,7 +800,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
       ? `<div class="nivi-line">Good news, <b>${escapeHtml(profile.name||'friend')}</b>, at your current pace you're set to reach this. Here's the picture.</div>`
       : chosenLever
         ? `<div class="nivi-line">Here's how <b>${leverTitle[chosenLever]||'your chosen path'}</b> plays out, <b>${escapeHtml(profile.name||'friend')}</b>.</div>`
-        : `<div class="nivi-line">Here's exactly where you stand, <b>${escapeHtml(profile.name||'friend')}</b>, and three honest ways to close the gap.</div>`;
+        : `<div class="nivi-line">Here's exactly where you stand, <b>${escapeHtml(profile.name||'friend')}</b>, and two ways to close it.</div>`;
 
     // stepUp text only if optB is a genuine increase over current monthly
     const stepUp = (optB_monthly && monthly && optB_monthly > monthly*1.02)
