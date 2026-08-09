@@ -614,7 +614,13 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'google/gemini-2.0-flash-exp:free',
+          model: 'meta-llama/llama-3.3-70b-instruct:free',
+          // OpenRouter will fallback through this list automatically
+          models: [
+            'meta-llama/llama-3.3-70b-instruct:free',
+            'mistralai/mistral-small-3.1-24b-instruct:free',
+            'google/gemini-2.0-flash-exp:free'
+          ],
           max_tokens: 1200,
           messages: [{ role: 'system', content: systemPrompt() }, ...history]
         })
@@ -625,6 +631,12 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
         throw new Error(msg);
       }
       let raw = (data.choices[0].message && data.choices[0].message.content) || '';
+      // Strip model-specific metadata some models (e.g. Gemini) inject into responses
+      raw = raw.replace(/\*?\*?User Safety:\s*\w+\*?\*?/gi, '');
+      raw = raw.replace(/\*?\*?Response Safety:\s*\w+\*?\*?/gi, '');
+      raw = raw.replace(/Safety Rating[^\n]*\n?/gi, '');
+      raw = raw.replace(/\[SAFETY[^\]]*\]/gi, '');
+      raw = raw.trim();
       if (!raw) raw = '...'; // guard: API must not receive empty assistant turns
       history.push({ role:'assistant', content:raw });
 
