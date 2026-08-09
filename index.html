@@ -330,6 +330,7 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
   let lastFin = null;     // stores last computed plan so lever values are accessible on tap
   let lastPlanData = null;  // stores the raw plan object for lever re-renders
   let lastOnTrack = null;    // stores on-track result so success handler can use correct framing
+  let pendingGoal = null;     // stores goal text typed during onboarding, used after name/age/risk
 
   function updateWhoami() {
     const bits = [];
@@ -403,6 +404,11 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
     ]);
   }
 
+  // Detect if text looks like a goal statement (financial keywords present)
+  function looksLikeGoal(text) {
+    return /[₹]|\b(lakh|crore|lakhs|crores|save|saving|buy|buying|home|house|flat|car|vehicle|education|college|wedding|marriage|travel|trip|retirement|retire|emergency|fund|invest)\b/i.test(text);
+  }
+
   // Pull whatever the user supplied out of a single message: name, age, and/or risk.
   function extractProfile(text){
     const found = {};
@@ -456,7 +462,19 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
   // Ask only for what's still missing; announce what we captured.
   function advanceOnboarding(justGot){
     updateWhoami();
-    if (!profile.name) { if (stage !== 'name') { stage='name'; setTimeout(()=>addRow('ai', `To start, what should I call you?`),300); } else { setTimeout(()=>addRow('ai', `What should I call you?`),300); } return; }
+    if (!profile.name) {
+      if (stage !== 'name') {
+        stage='name';
+        setTimeout(()=>addRow('ai', `To start, what should I call you?`),300);
+      } else if (justGot && justGot._rawText && looksLikeGoal(justGot._rawText)) {
+        // User typed a goal at the name stage, store it and ask for name
+        pendingGoal = justGot._rawText;
+        setTimeout(()=>addRow('ai', `Noted! I'll plan that for you. First, what should I call you?`),300);
+      } else {
+        setTimeout(()=>addRow('ai', `What should I call you?`),300);
+      }
+      return;
+    }
     if (!profile.age)  { stage='age';  setTimeout(()=>addRow('ai', `Lovely to meet you, <strong>${escapeHtml(profile.name)}</strong>. How old are you? It helps me judge how much runway a goal really has.`),300); return; }
     if (!profile.risk) {
       stage='risk';
@@ -466,13 +484,24 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
       return;
     }
     // everything present -> go to goal
-    stage='goaltype';
     profile.ret = RISK_RETURN[profile.risk] || profile.ret || 10;
-    setTimeout(()=>{
-      const ageBit = profile.age ? ` And at ${profile.age}, time's on your side.` : '';
-      addRow('ai', `Perfect. I'll plan around roughly ${profile.ret}% expected returns for you.${ageBit} Now the part that matters: <strong>what are you saving for?</strong> Pick whatever's closest, or just tell me in your own words.`);
-      goalChoices();
-    },300);
+    if (pendingGoal) {
+      // User already told us the goal during onboarding, use it directly
+      const goal = pendingGoal; pendingGoal = null;
+      stage = 'goal';
+      const ageBit = profile.age ? ` At ${profile.age}, time is on your side,` : '';
+      setTimeout(()=>{
+        addRow('ai', `Perfect, ${escapeHtml(profile.name)}. I'll plan at ${profile.ret}% expected returns.${ageBit} Let me work out that goal you mentioned.`);
+        turn(goal);
+      },300);
+    } else {
+      stage='goaltype';
+      setTimeout(()=>{
+        const ageBit = profile.age ? ` And at ${profile.age}, time's on your side.` : '';
+        addRow('ai', `Perfect. I'll plan around roughly ${profile.ret}% expected returns for you.${ageBit} Now the part that matters: <strong>what are you saving for?</strong> Pick whatever's closest, or just tell me in your own words.`);
+        goalChoices();
+      },300);
+    }
   }
 
   function handleInput(text, display) {
@@ -489,6 +518,7 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
         else if (/balan|moder/i.test(text)) got.risk='Moderate';
         else if (/grow|aggress/i.test(text)) got.risk='Aggressive';
       }
+      got._rawText = text;  // pass raw text so advanceOnboarding can detect goal statements
       if (got.name && !profile.name) profile.name = got.name;
       if (got.age  && !profile.age)  profile.age  = got.age;
       if (got.risk && !profile.risk){ profile.risk = got.risk; profile.ret = RISK_RETURN[got.risk]; }
