@@ -614,13 +614,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'meta-llama/llama-3.3-70b-instruct:free',
-          // OpenRouter will fallback through this list automatically
-          models: [
-            'meta-llama/llama-3.3-70b-instruct:free',
-            'mistralai/mistral-small-3.1-24b-instruct:free',
-            'google/gemini-2.0-flash-exp:free'
-          ],
+          model: 'llama-3.3-70b-versatile',
           max_tokens: 1200,
           messages: [{ role: 'system', content: systemPrompt() }, ...history]
         })
