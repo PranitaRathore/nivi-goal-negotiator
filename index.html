@@ -829,6 +829,14 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
 
     const goalTitle = p.goal_title || (p.goal ? `${p.goal}` : 'Your goal');
 
+    // Congratulations banner, shown when a lever gets the user to their goal
+    const congrats = onTrack && chosenLever ? `
+      <div class="congrats-banner">
+        <span class="emoji">🎉</span>
+        <div class="title">Goal reached, ${escapeHtml(profile.name||'friend')}!</div>
+        <div class="sub">By ${leverTitle[chosenLever]||'your chosen path'}, your savings will cover your goal in full.</div>
+      </div>` : '';
+
     return `<div class="gap-hero">
       ${nivi_line}
       ${congrats}
