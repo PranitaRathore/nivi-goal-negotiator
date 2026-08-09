@@ -625,7 +625,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
     if (retM) { const v=parseFloat(retM[1]); if (v>=1&&v<=30) profile.ret=v; }
   }
 
-  async function turn(text) {
+  async function turn(text, retryCount = 0) {
     // Cancel any in-flight request before starting a new one
     if (abortController) abortController.abort();
     abortController = new AbortController();
@@ -648,7 +648,8 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
         body: JSON.stringify({
           model: 'llama-3.3-70b-versatile',
           max_tokens: 1200,
-          messages: [{ role: 'system', content: systemPrompt() }, ...history]
+          // Keep last 6 messages to avoid token limit on long conversations
+          messages: [{ role: 'system', content: systemPrompt() }, ...history.slice(-6)]
         })
       });
       const data = await res.json();
@@ -749,6 +750,38 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
         history.pop();
         // restore chips if we were mid-goal-selection
         if (stage === 'goal' && !lockedRec) { stage = 'goaltype'; goalChoices(); }
+      } else if (chosenLever && retryCount === 0) {
+        // Lever call failed, auto-retry once once with trimmer history before showing error
+        history.pop();
+        console.log('Lever call failed, auto-retrying...');
+        retryCount = 1;
+        thinkRow.querySelector('.bubble').innerHTML = '<span class="thinking">retrying<span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>';
+        try {
+          history.push({ role: 'user', content: text });
+          const r2 = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              max_tokens: 1000,
+              messages: [{ role: 'system', content: systemPrompt() }, ...history.slice(-4)]
+            })
+          });
+          const d2 = await r2.json();
+          if (r2.ok && d2.choices && d2.choices[0]) {
+            let r2raw = (d2.choices[0].message && d2.choices[0].message.content) || '';
+            r2raw = r2raw.replace(/all three paths/gi,'the options below').replace(/three (ways|paths|options)/gi,'two ways').trim();
+            history.push({ role: 'assistant', content: r2raw });
+            let m2 = r2raw.match(/@@PLAN(\{[\s\S]*?\})@@/) || r2raw.match(/@@PLAN(\{[\s\S]*?\})\s*$/m) || r2raw.match(/@@PLAN(\{[\s\S]*?\})/);
+            let plan2 = null, convo2 = r2raw;
+            if (m2) { convo2 = r2raw.slice(0,m2.index).trim(); try { plan2 = JSON.parse(m2[1]); } catch(e){} }
+            const ok2 = plan2 && plan2.target_today > 0 && plan2.timeline_years > 0 && plan2.monthly != null && plan2.monthly > 0;
+            let html2 = '<span style="font-family:system-ui,sans-serif;font-size:14px">' + escapeHtml(lastOnTrack ? (chosenLever ? 'Great choice. Here is how that plays out.' : 'Good news. Your savings cover this goal.') : 'Here is exactly where you stand.') + '</span>';
+            if (ok2) { if (plan2.monthly) profile.monthly=plan2.monthly; if (plan2.inflation_pct) profile.inflation=+plan2.inflation_pct; if (plan2.return_pct) profile.ret=+plan2.return_pct; if (chosenLever==='stretch'&&profile.chosenYears) plan2.timeline_years=profile.chosenYears; if (chosenLever==='increase'&&profile.monthly) plan2.monthly=profile.monthly; try{html2+=renderNegotiation(plan2);}catch(e){} } else if (chosenLever&&lastPlanData) { const s2=Object.assign({},lastPlanData); if(chosenLever==='stretch'&&profile.chosenYears)s2.timeline_years=profile.chosenYears; if(chosenLever==='increase'&&profile.monthly)s2.monthly=profile.monthly; if(s2.target_today&&s2.timeline_years&&s2.monthly!=null)try{html2+=renderNegotiation(s2);}catch(e){} }
+            thinkRow.querySelector('.bubble').innerHTML = html2;
+            if (ok2) wireNegotiation(thinkRow, plan2);
+          } else { throw new Error('retry failed'); }
+        } catch(e2) { history.pop(); thinkRow.querySelector('.bubble').innerHTML = 'Something went wrong. Try again or pick a different goal.'; if(lockedRec&&text){thinkRow.querySelector('.bubble').innerHTML+=' <button class="retry-btn">Try again</button>';const rb=thinkRow.querySelector('.retry-btn');if(rb)rb.addEventListener('click',()=>{thinkRow.remove();turn(text);});} }
       } else {
         // Pop both assistant (last) and user (second-to-last) if both were pushed before the error
         let lastUserMsg = '';
