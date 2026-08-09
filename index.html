@@ -444,7 +444,7 @@ const GOAL_IMG = {"House": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaQAAA
         .replace(/\b(you\s+can\s+call\s+me|call\s+me|my\s+name\s+is|i\s+am|i'?m|this\s+is|it'?s|name'?s|hi|hey|hello)\b/ig,' ')
         .trim();
       let nameTok = (t.match(/[\p{L}][\p{L}\-']*/u)||[])[0];
-      if (nameTok && !/^(me|you|my|the|a|an|he|she|they|it|we)$/i.test(nameTok)) {
+      if (nameTok && !/^(me|you|my|the|a|an|he|she|they|it|we|i|want|just|hi|hey|ok|yes|no|so|and)$/i.test(nameTok)) {
         found.name = nameTok.charAt(0).toUpperCase() + nameTok.slice(1);
       }
     }
@@ -535,7 +535,7 @@ The app re-renders the card with the new numbers so the user sees their updated 
 
 MATH: You do NOT need to compute projections, gaps, or the three levers. The app computes ALL of those on-device from the raw inputs below, so the numbers are always correct. You only need to extract the raw inputs.
 
-STYLE: warm, plain, decisive. ₹ and Indian formatting. Never use em dashes or en dashes in your writing; use commas, periods, or colons instead. Address ${profile.name||'them'} by name occasionally.
+STYLE: warm, plain, decisive. ₹ and Indian formatting. Never use em dashes or en dashes in your writing; use commas, periods, or colons instead. Address ${profile.name||'them'} by name occasionally. If the user asks to change the expected return or inflation rate, accept it and recompute without challenging or arguing about their risk appetite.
 
 Append ONE final line EXACTLY (plain integers, rupees/years, no ₹, no commas, no strings on numbers except goal/goal_title):
 @@PLAN{"goal":"home","goal_title":"Buy a house worth ₹80 lakh in 4 years","target_today":8000000,"timeline_years":4,"monthly":50000,"existing":0,"return_pct":${profile.ret||10},"inflation_pct":${profile.inflation}}@@
@@ -587,8 +587,8 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
     const inflM = t.match(/inflat\w*\s*(?:rate\s*)?(?:of\s*)?([\d.]+)\s*%/)
                || t.match(/([\d.]+)\s*%\s*inflat/);
     if (inflM) { const v=parseFloat(inflM[1]); if (v>=1&&v<=30) profile.inflation=v; }
-    // Return: "10% return", "return 13%", "expected return 8", "what if return is 8%"
-    const retM = t.match(/(?:expected\s+)?return\s+(?:is\s+|of\s+|rate\s+)?([\d.]+)\s*%/)
+    // Return: "10% return", "return 13%", "change return to 13%", "set return to 8%"
+    const retM = t.match(/(?:change\s+|set\s+|use\s+)?(?:expected\s+)?return\s+(?:is\s+|of\s+|rate\s+|to\s+)?([\d.]+)\s*%/)
               || t.match(/([\d.]+)\s*%\s*(?:return|expected)/);
     if (retM) { const v=parseFloat(retM[1]); if (v>=1&&v<=30) profile.ret=v; }
   }
@@ -665,7 +665,8 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
       }
 
       let html = escapeHtml(convo).replace(/\n/g,'<br>').replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-      const ok = plan && plan.target_today > 0 && plan.timeline_years > 0 && plan.monthly != null;
+      // monthly=0 means model didn't have the value yet, treat as not-ok and ask for it
+      const ok = plan && plan.target_today > 0 && plan.timeline_years > 0 && plan.monthly != null && plan.monthly > 0;
       if (ok) {
         // Sync profile assumptions
         if (plan.monthly)       profile.monthly    = plan.monthly;
