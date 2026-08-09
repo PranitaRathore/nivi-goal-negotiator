@@ -655,7 +655,10 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
       const data = await res.json();
       if (!res.ok || !data.choices || !data.choices[0]) {
         const msg = data?.error?.message || 'API error ' + res.status;
-        throw new Error(msg);
+        const isRateLimit = res.status === 429 || (msg && msg.toLowerCase().includes('rate'));
+        const err = new Error(msg);
+        err.isRateLimit = isRateLimit;
+        throw err;
       }
       let raw = (data.choices[0].message && data.choices[0].message.content) || '';
       // Strip model-specific metadata some models (e.g. Gemini) inject into responses
@@ -781,7 +784,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
             thinkRow.querySelector('.bubble').innerHTML = html2;
             if (ok2) wireNegotiation(thinkRow, plan2);
           } else { throw new Error('retry failed'); }
-        } catch(e2) { history.pop(); thinkRow.querySelector('.bubble').innerHTML = 'Something went wrong. Try again or pick a different goal.'; if(lockedRec&&text){thinkRow.querySelector('.bubble').innerHTML+=' <button class="retry-btn">Try again</button>';const rb=thinkRow.querySelector('.retry-btn');if(rb)rb.addEventListener('click',()=>{thinkRow.remove();turn(text);});} }
+        } catch(e2) { history.pop(); thinkRow.querySelector('.bubble').innerHTML = (err && err.isRateLimit) ? 'Usage limit reached. Please wait a moment and try again.' : 'Something went wrong. Try again or pick a different goal.'; if(lockedRec&&text){thinkRow.querySelector('.bubble').innerHTML+=' <button class="retry-btn">Try again</button>';const rb=thinkRow.querySelector('.retry-btn');if(rb)rb.addEventListener('click',()=>{thinkRow.remove();turn(text);});} }
       } else {
         // Pop both assistant (last) and user (second-to-last) if both were pushed before the error
         let lastUserMsg = '';
@@ -790,7 +793,7 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
           lastUserMsg = history[history.length-1].content || '';
           history.pop();
         }
-        thinkRow.querySelector('.bubble').innerHTML = `Something went wrong. Try again or pick a different goal.`;
+        thinkRow.querySelector('.bubble').innerHTML = (err && err.isRateLimit) ? 'Usage limit reached. Please wait a moment and try again.' : 'Something went wrong. Try again or pick a different goal.';
         // if we haven't got a plan yet, restore the goal chips so the user isn't stuck
         if (stage === 'goal' && !lockedRec) { stage = 'goaltype'; goalChoices(); }
         // if we do have a plan and just a follow-up failed, offer inline retry
