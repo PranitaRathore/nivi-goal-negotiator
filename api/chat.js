@@ -4,9 +4,12 @@ module.exports = async function handler(req, res) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'GROQ_API_KEY not set in Vercel environment variables' });
 
-  // Primary: llama-3.3-70b-versatile (best quality, 1000 req/day free)
-  // Fallback: llama-3.1-8b-instant   (faster, 14400 req/day free)
-  const models = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'];
+  // Model fallback chain — if one hits rate limit or fails, next is tried automatically
+  const models = [
+    'openai/gpt-oss-120b',   // GPT-OSS 120B: best quality, Groq recommended replacement
+    'qwen/qwen3.6-27b',      // Qwen 3.6 27B: strong fallback, high daily limit
+    'openai/gpt-oss-20b',    // GPT-OSS 20B: fastest, highest daily limit
+  ];
 
   for (const model of models) {
     try {
@@ -22,9 +25,9 @@ module.exports = async function handler(req, res) {
 
       const data = await r.json();
 
-      // On rate limit, try the next model in the list
-      if (r.status === 429) {
-        console.log(`Rate limit on ${model}, trying next...`);
+      // On rate limit or model error, silently try next
+      if (r.status === 429 || r.status === 404) {
+        console.log(`Model ${model} unavailable (${r.status}), trying next...`);
         continue;
       }
 
@@ -32,8 +35,6 @@ module.exports = async function handler(req, res) {
         console.error(`Groq error (${model}):`, r.status, JSON.stringify(data).slice(0, 200));
       }
 
-      // Tag the response with which model was used
-      if (data.model === undefined) data.model = model;
       return res.status(r.status).json(data);
 
     } catch (err) {
@@ -41,13 +42,11 @@ module.exports = async function handler(req, res) {
       if (model === models[models.length - 1]) {
         return res.status(500).json({ error: err.message });
       }
-      // Try next model on network error too
       continue;
     }
   }
 
-  // All models exhausted
   return res.status(429).json({
-    error: 'All models are rate limited. Daily quota may be reached. Please try again tomorrow or reduce request frequency.'
+    error: 'All models are currently unavailable. Please try again in a moment.'
   });
 };
