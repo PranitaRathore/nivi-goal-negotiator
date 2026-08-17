@@ -667,6 +667,14 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
       raw = raw.replace(/Safety Rating[^\n]*\n?/gi, '');
       raw = raw.replace(/\[SAFETY[^\]]*\]/gi, '');
       // Normalise "three paths/ways" → "two ways" since we removed the third lever
+      // Extract @@PLAN BEFORE stripping think tags (some models put it inside)
+      const planInThink = raw.match(/@@PLAN(\{[\s\S]*?\})(?:@@)?/);
+      // Strip chain-of-thought reasoning blocks (GPT-OSS, Qwen expose these)
+      raw = raw.replace(/<think>[\s\S]*?<\/think>/gi, '');
+      // Strip markdown code fences some models wrap around the PLAN block
+      raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/g, '');
+      // Restore PLAN block if it was inside a think tag and got stripped
+      if (planInThink && !raw.includes('@@PLAN')) raw += '\n' + planInThink[0];
       raw = raw.replace(/all three paths/gi, 'the options below');
       raw = raw.replace(/three (ways|paths|options)/gi, 'two ways');
       raw = raw.trim();
@@ -1094,7 +1102,11 @@ Omit the whole @@PLAN block until you have target, timeline AND monthly. Never s
   function rerun() {
     addRow('you', escapeHtml(`Recompute using ${profile.ret}% return and ${profile.inflation}% inflation`));
     clearChoices();
-    turn(`Recompute my goal using ${profile.ret}% expected return (${profile.risk}) and ${profile.inflation}% inflation. Keep the same target, timeline and monthly amount as before.`);
+    // Include explicit plan values so the model doesn't lose context after history trimming
+    const planContext = lastPlanData
+      ? ` The goal details are: target_today=${lastPlanData.target_today}, timeline_years=${lastPlanData.timeline_years}, monthly=${profile.monthly}, existing=${lastPlanData.existing||0}.`
+      : '';
+    turn(`Recompute my goal using ${profile.ret}% expected return (${profile.risk||'Moderate'}) and ${profile.inflation}% inflation.${planContext} Keep all goal values the same, only the return and inflation assumptions change.`);
   }
 
   function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
